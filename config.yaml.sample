@@ -1,2 +1,4 @@
 openai:
   api_key: "..."
+assemblyai:
+  api_key: "..."
