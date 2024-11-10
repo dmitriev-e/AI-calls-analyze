@@ -2,3 +2,5 @@ openai:
   api_key: "..."
 assemblyai:
   api_key: "..."
+yandex:
+  speech_api_key: "..."

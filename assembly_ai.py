@@ -1,3 +1,5 @@
+import json
+import os
 import re
 
 import yaml
@@ -8,45 +10,96 @@ with open('config.yaml', 'r') as f:
     config = yaml.safe_load(f)
 
 aai.settings.api_key = config['assemblyai']['api_key']
+audio_folder = 'files/audio/'
+transcript_folder = 'files/transcriptions/'
 
-if __name__ == '__main__':
-    file = open("files/audio/in-25050300-99060607-20240924-152232-1727180552.541352.wav", "rb")
 
-    aai_config = aai.TranscriptionConfig(speaker_labels=True, language_detection=True, speakers_expected=3)
+def get_file_list(folder_path):
+    file_list = []
+    for file in os.listdir(folder_path):
+        if file.endswith('.wav'):
+            file_list.append(file)
+    return file_list
+
+
+def read_transcript(file_path):
+    with open(file_path, 'r', encoding='utf-8') as f:
+        transcript = json.load(f)
+    return transcript
+
+
+def transcript_json_exist(file_name):
+    transcript_path = os.path.join(transcript_folder, file_name + '.json')
+    return os.path.exists(transcript_path)
+
+
+def transcript_txt_exist(file_name):
+    transcript_path = os.path.join(transcript_folder, file_name + '.txt')
+    return os.path.exists(transcript_path)
+
+
+def do_aai_transcript(file_name):
+    file = open(audio_folder + file_name, "rb")
+
+    aai_config = aai.TranscriptionConfig(speaker_labels=True, language_detection=True, speakers_expected=2)
     transcriber = aai.Transcriber()
     transcript = transcriber.transcribe(file, config=aai_config)
 
-    # assemblyai get transcript by ID
-    # transcript = aai.Transcript.get_by_id(transcript_id='74f1040b-1516-415e-bc3c-38f29d6281a1')
+    return transcript
 
+
+def ask_gpt(transcript):
     text_with_speaker_labels = ""
-    for utt in transcript.utterances:
-        text_with_speaker_labels += f"Speaker {utt.speaker}:\n{utt.text}\n"
+    for utt in transcription.utterances:
+        text_with_speaker_labels += f"Speaker {utt.speaker}: {utt.text}\n"
 
-    unique_speakers = set(utterance.speaker for utterance in transcript.utterances)
+    unique_speakers = set(utterance.speaker for utterance in transcription.utterances)
 
-    questions = []
+    speakers_words = []
     for speaker in unique_speakers:
-        questions.append(
-            aai.LemurQuestion(
-                question=f"Who is speaker {speaker}?",
-                answer_format="<First Name> <Last Name (if applicable)>"
-            )
-        )
+        speakers_words.append(f'\"Speaker {speaker}\"')
 
-    result = aai.Lemur().question(
-        questions,
+    result = aai.Lemur().task(
+        f"This is a speaker-labeled transcript of a phone call between Customer and Manager of Customer Support Service.\n"
+        f"Your task is to identify speaker names and change words {', '.join(speakers_words)} to their names.\n"
+        f"If you know Customer's agreement number, add it in speaker name in parentheses.\n"
+        f"Do not add and change any other words in conversation. In answer use same language as in original transcript.\n",
         input_text=text_with_speaker_labels,
-        context="Your task is to infer the speaker's name from the speaker-labelled transcript"
+        final_model=aai.LemurModel.claude3_5_sonnet,
     )
 
-    speaker_mapping = {}
-    for qa_response in result.response:
-        pattern = r"Who is speaker (\w)\?"
-        match = re.search(pattern, qa_response.question)
-        if match and match.group(1) not in speaker_mapping.keys():
-            speaker_mapping.update({match.group(1): qa_response.answer})
+    return result
 
-    for utterance in transcript.utterances:
-        speaker_name = speaker_mapping[utterance.speaker]
-        print(f"{speaker_name}: {utterance.text}")
+
+def write_transcript_json(transcript, file_name):
+    # write transcript to JOSN file
+    with open(transcript_folder + file_name, 'w', encoding='utf-8') as f:
+        json.dump(transcript, f, indent=4, ensure_ascii=False)
+
+
+def write_transcript_txt(transcript_text, file_name):
+    # write transcript to TXT file in transcript folder
+    with open(transcript_folder + file_name + '.txt', 'w', encoding='utf-8') as f:
+        f.write(transcript_text)
+
+
+if __name__ == '__main__':
+
+    for file in get_file_list(audio_folder):
+        print(f'Transcribing {file}')
+        if not transcript_json_exist(file):
+            print('JSN file does not exist. Transcribing in AssemblyAI ...')
+            transcription = do_aai_transcript(file)
+            print('AssemblyAI transcription done. Writing to JSON file ...')
+            write_transcript_json(transcription, file)
+            if not transcript_txt_exist(file):
+                print('TXT file does not exist. Asking GPT ...')
+                transcript_text = ask_gpt(transcription)
+                print('GPT response received. Writing to TXT file ...')
+                write_transcript_txt(transcript_text, file)
+            else:
+                print('TXT file already exists.')
+        else:
+            print('JSON file already exists.')
+
+    print('All done.')

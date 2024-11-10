@@ -1,3 +1,5 @@
 .idea/
 .venv/
+files/audio/*
+files/transcriptions/*
 config.yaml
