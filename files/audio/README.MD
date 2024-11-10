@@ -1,0 +1,1 @@
+Place here *.wav files that you want to transcribe.

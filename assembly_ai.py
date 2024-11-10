@@ -11,7 +11,7 @@ with open('config.yaml', 'r') as f:
 
 aai.settings.api_key = config['assemblyai']['api_key']
 audio_folder = 'files/audio/'
-transcript_folder = 'files/transcriptions/'
+transcript_folder = 'files/transcriptions/assembly_ai/'
 
 
 def get_file_list(folder_path):
@@ -22,8 +22,8 @@ def get_file_list(folder_path):
     return file_list
 
 
-def read_transcript(file_path):
-    with open(file_path, 'r', encoding='utf-8') as f:
+def read_transcript(file_name):
+    with open(transcript_folder + file_name + '.json', 'r', encoding='utf-8') as f:
         transcript = json.load(f)
     return transcript
 
@@ -73,8 +73,8 @@ def ask_gpt(transcript):
 
 def write_transcript_json(transcript, file_name):
     # write transcript to JOSN file
-    with open(transcript_folder + file_name, 'w', encoding='utf-8') as f:
-        json.dump(transcript, f, indent=4, ensure_ascii=False)
+    with open(transcript_folder + file_name + '.json', 'w', encoding='utf-8') as f:
+        json.dump(transcript.json_response, f, indent=4, ensure_ascii=False)
 
 
 def write_transcript_txt(transcript_text, file_name):
@@ -86,20 +86,29 @@ def write_transcript_txt(transcript_text, file_name):
 if __name__ == '__main__':
 
     for file in get_file_list(audio_folder):
-        print(f'Transcribing {file}')
-        if not transcript_json_exist(file):
-            print('JSN file does not exist. Transcribing in AssemblyAI ...')
+        transcript_id = None
+        print(f'Processing {file}')
+        # =========================
+        if transcript_json_exist(file):
+            print('JSON file already exists.')
+            # read transcript from JSON file
+            transcript = read_transcript(file)
+            transcript_id = transcript['id']
+            transcription = aai.Transcript.get_by_id(transcript_id)
+
+        else:
+            print('JSON file does not exist. Transcribing in AssemblyAI ...')
             transcription = do_aai_transcript(file)
             print('AssemblyAI transcription done. Writing to JSON file ...')
             write_transcript_json(transcription, file)
-            if not transcript_txt_exist(file):
-                print('TXT file does not exist. Asking GPT ...')
-                transcript_text = ask_gpt(transcription)
-                print('GPT response received. Writing to TXT file ...')
-                write_transcript_txt(transcript_text, file)
-            else:
-                print('TXT file already exists.')
+
+        # =========================
+        if transcript_txt_exist(file):
+            print('TXT file already exists.\n=====================')
         else:
-            print('JSON file already exists.')
+            print('TXT file does not exist. Asking GPT ...')
+            gpt_response = ask_gpt(transcription)
+            print('GPT response received. Writing to TXT file ...')
+            write_transcript_txt(gpt_response.response, file)
 
     print('All done.')
