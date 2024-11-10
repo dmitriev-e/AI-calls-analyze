@@ -41,7 +41,13 @@ def transcript_txt_exist(file_name):
 def do_aai_transcript(file_name):
     file = open(audio_folder + file_name, "rb")
 
-    aai_config = aai.TranscriptionConfig(speaker_labels=True, language_detection=True, speakers_expected=2)
+    aai_config = aai.TranscriptionConfig(
+        # speaker_labels=True,
+        # language_detection=True,
+        speakers_expected=2,
+        speech_model=aai.SpeechModel.nano,
+        language_code="el"
+    )
     transcriber = aai.Transcriber()
     transcript = transcriber.transcribe(file, config=aai_config)
 
@@ -50,7 +56,7 @@ def do_aai_transcript(file_name):
 
 def ask_gpt(transcript):
     text_with_speaker_labels = ""
-    for utt in transcription.utterances:
+    for utt in transcript.utterances:
         text_with_speaker_labels += f"Speaker {utt.speaker}: {utt.text}\n"
 
     unique_speakers = set(utterance.speaker for utterance in transcription.utterances)
@@ -62,8 +68,9 @@ def ask_gpt(transcript):
     result = aai.Lemur().task(
         f"This is a speaker-labeled transcript of a phone call between Customer and Manager of Customer Support Service.\n"
         f"Your task is to identify speaker names and change words {', '.join(speakers_words)} to their names.\n"
+        f"If you can't identify speaker names, leave \"Customer\" or \"Manager\"\n"
         f"If you know Customer's agreement number, add it in speaker name in parentheses.\n"
-        f"Do not add and change any other words in conversation. In answer use same language as in original transcript.\n",
+        f"Don't add any words and don't change any other words in conversation. In answer use same language as in original transcript.\n",
         input_text=text_with_speaker_labels,
         final_model=aai.LemurModel.claude3_5_sonnet,
     )
